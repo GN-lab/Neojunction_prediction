@@ -69,7 +69,6 @@ Sets the maximum allowed intron length (1,000,000 bases). This limits extremely 
 # Parameters: --alignSJoverhangMin 8 --alignIntronMin 20 --outSJfilterOverhangMin 15 20 20 20
 ####################################################################
 
-
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -138,80 +137,69 @@ done < "$SAMPLES_TXT"
 echo "[AGG] Aggregating junctions..."
 
 "${PYTHON}" << 'PYCODE'
-import pandas as pd
-import os
+import pandas as pd, os
 
-# Load config
-outdir = os.environ['OUTDIR']
-samples = [s.strip() for s in open(os.environ['SAMPLES_TXT'])]
-total_samples = len(samples)
-min_samples = int(max(2, float(os.environ['MIN_SAMPLES_PCT']) * total_samples))
-
-# Load all junctions
+outdir       = os.environ['OUTDIR']
+samples_file = os.environ['SAMPLES_TXT']
+min_samples  = int(max(2, float(os.environ['MIN_SAMPLES_PCT'])*len(open(samples_file).read().splitlines())))
+               
+# 1. Load all junctions with sample labels
 dfs = []
-for sample in samples:
-    bed_file = f"{outdir}/{sample}.juncs.bed"
-    if os.path.exists(bed_file):
-        df = pd.read_csv(bed_file, sep='\t', 
+for sample in open(samples_file).read().splitlines():
+    bed = f"{outdir}/{sample}.juncs.bed"
+    if os.path.exists(bed):
+        df = pd.read_csv(bed, sep='\t',
                          names=['chr','start','end','name','reads','strand'])
         df['sample'] = sample
+        # Create key identical to later agg key
+        df['key'] = df.apply(lambda r: f"{r.chr}:{r.start+1}:{r.end}:{r.strand}", axis=1)
         dfs.append(df)
+all_df = pd.concat(dfs, ignore_index=True)
 
-# Aggregate (key uses 1-based start)
-agg = (pd.concat(dfs)
-       .groupby(['chr','start','end','strand'])
+# 2. Build sample list per junction
+sample_map = all_df.groupby('key')['sample'].unique().to_dict()
+
+# 3. Aggregate reads and count samples
+agg = (all_df
+       .groupby(['chr','start','end','strand','key'])
        .agg(total_reads=('reads','sum'),
             samples_expressed=('sample','nunique'))
        .reset_index())
-agg['key'] = agg.apply(lambda x: f"{x['chr']}:{x['start']+1}:{x['end']}:{x['strand']}", axis=1)
 
-# Load canonical junctions and mark status
-with open(os.environ['CANON_SET']) as f:
-    canon_juncs = set(line.strip() for line in f)
-agg['is_canonical'] = agg['key'].isin(canon_juncs)
+# 4. Load canonical & GTEx sets
+canon = set(open(os.environ['CANON_SET']).read().splitlines())
+gtex  = set(open(os.environ['GTEX_SET']).read().splitlines()) if os.path.exists(os.environ['GTEX_SET']) else set()
 
-# Calculate canonical reads for frequency calculation
-canon_df = agg[agg['is_canonical']].set_index('key')
-def get_canonical_reads(row):
-    return canon_df['total_reads'][row['key']] if row['key'] in canon_df.index else 0
-agg['canonical_reads'] = agg.apply(get_canonical_reads, axis=1)
-agg['frequency'] = agg['total_reads'] / (agg['total_reads'] + agg['canonical_reads'].replace(0, 1))
+# 5. Protein filter via bedtools intersect file
+prot_bed = f"{outdir}/protein_filtered.bed"
+protein_keys = set(pd.read_csv(prot_bed, sep='\t', header=None)[3]) if os.path.exists(prot_bed) else set()
 
-# Save temp file for bedtools
-agg[['chr','start','end','key','total_reads','strand']].to_csv(
-    f"{outdir}/temp_junctions.bed", sep='\t', index=False, header=False)
+# 6. Compute frequency
+#    (use 1 when no canonical_reads to avoid div0)
+canon_reads = {row.key: row.total_reads for _,row in agg[agg.key.isin(canon)].iterrows()}
+agg['canonical_reads'] = agg['key'].map(canon_reads).fillna(0).astype(int)
+agg['frequency'] = agg['total_reads'] / (agg['total_reads'] + agg['canonical_reads'].replace(0,1))
 
-# Protein-coding filter (requires 0-based BED)
-os.system(f"bedtools intersect -a {outdir}/temp_junctions.bed -b {os.environ['PROTEIN_BED']} -wa -u > {outdir}/protein_filtered.bed")
-protein_keys = set()
-protein_filtered_path = f"{outdir}/protein_filtered.bed"
-if os.path.exists(protein_filtered_path) and os.path.getsize(protein_filtered_path) > 0:
-    protein_keys = set(pd.read_csv(protein_filtered_path, sep='\t', header=None)[3])
+# 7. Apply final filters
+neo = agg[
+    (agg.total_reads       >= int(os.environ['MIN_TOTAL_READS'])) &
+    (agg.key.isin(protein_keys))              &  # protein only
+    (~agg.key.isin(canon))                    &  # exclude canonical
+    (~agg.key.isin(gtex))                     &  # exclude GTEx
+    (agg.frequency        > float(os.environ['MIN_FREQUENCY'])) &
+    (agg.samples_expressed>= min_samples)
+].copy()
 
-# GTEx filter
-gtex_juncs = set()
-if os.path.exists(os.environ['GTEX_SET']) and os.path.getsize(os.environ['GTEX_SET']) > 0:
-    with open(os.environ['GTEX_SET']) as f:
-        gtex_juncs = set(line.strip() for line in f if line.strip())
+# 8. Annotate samples list
+neo['samples'] = neo['key'].map(sample_map).apply(lambda arr: ",".join(sorted(arr)))
 
-# Apply final filters
-neo_juncs = agg[
-    (agg['total_reads'] >= int(os.environ['MIN_TOTAL_READS'])) &
-    (~agg['is_canonical']) &  # Exclude canonical
-    (agg['key'].isin(protein_keys)) &  # Protein-coding only
-    (~agg['key'].isin(gtex_juncs)) &  # Not in GTEx normals
-    (agg['frequency'] > float(os.environ['MIN_FREQUENCY'])) &  # Frequency >1%
-    (agg['samples_expressed'] >= min_samples)  # Public junctions: ≥10% samples
-]
+# 9. Write annotated output
+cols = ['chr','start','end','strand','total_reads','samples_expressed','frequency','samples']
+neo.to_csv(f"{outdir}/neo_junctions.annotated.bed",
+           sep='\t', index=False, header=True)
 
-# Save results (1-based coordinates) with frequency
-neo_juncs[['chr','start','end','strand','total_reads','samples_expressed','frequency']]\
-    .to_csv(f"{outdir}/neo_junctions.bed", sep='\t', index=False, header=True)
-
-print(f"[RESULT] Found {len(neo_juncs)} neo-junctions passing filters")
+print(f"[RESULT] Found {len(neo)} neo-junctions. Detailed output in neo_junctions.annotated.bed")
 PYCODE
-echo "[DONE] Results saved to ${OUTDIR}/neo_junctions.bed"
 
-
-
+echo "[DONE] Annotated results saved to ${OUTDIR}/neo_junctions.annotated.bed"
 
