@@ -317,6 +317,11 @@ p1 <- ggplot(plot_data, aes(x = reorder(junction_label, pos), y = sample)) +
     y = "Sample ID"
   )
 
+
+<img width="4800" height="8700" alt="neo_junctions_heatmap" src="https://github.com/user-attachments/assets/6dc8adbb-1b58-4688-b1b3-cb1e86c997ec" />
+
+
+
 # 5. Create a summary bar plot
 summary_data <- neo %>%
   mutate(chr = factor(chr, levels = c(1:22, "X", "Y"))) %>%
@@ -339,6 +344,12 @@ p2 <- ggplot(summary_data, aes(x = reorder(paste0("chr", chr, ":", start, "-", e
     y = "Number of samples"
   )
 
+
+<img width="4800" height="1800" alt="neo_junctions_summary" src="https://github.com/user-attachments/assets/f5394c8c-f46c-449c-b9bf-090689ac6239" />
+
+
+
+
 # 6. Create a frequency distribution plot
 p3 <- ggplot(neo, aes(x = samples_expressed)) +
   geom_histogram(bins = 15, fill = "darkgreen", alpha = 0.7, color = "white") +
@@ -351,6 +362,10 @@ p3 <- ggplot(neo, aes(x = samples_expressed)) +
     x = "Number of samples with junction",
     y = "Number of junctions"
   )
+
+<img width="2400" height="1800" alt="neo_junctions_distribution" src="https://github.com/user-attachments/assets/6effd4da-dcad-40cc-8550-bc0fc4770c5f" />
+
+
 
 
 # 7. Expanded Neo_juncton per sample count to one row.
@@ -378,6 +393,13 @@ p <- ggplot(sample_counts, aes(x = factor(sample, levels = sample), y = neo_junc
     title = "Number of Neo-Junctions per Sample",
     y = "Neo-Junction Count"
   )
+
+
+
+<img width="6000" height="1800" alt="neo_junctions_per_sample" src="https://github.com/user-attachments/assets/a7de233a-9675-4e7d-ab00-a97fd6846537" />
+
+
+
 
 # 7. Save all plots
 ggsave("neo_junctions_heatmap.png", plot = p1, width = 16, height = 29, dpi = 300)
