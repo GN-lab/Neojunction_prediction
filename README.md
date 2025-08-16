@@ -408,10 +408,16 @@ ggsave("neo_junctions_distribution.png", plot = p3, width = 8, height = 6, dpi =
 ggsave("neo_junctions_per_sample.png", plot = p, width = 20, height = 6, dpi = 300)
 
 # 8. Print summary statistics
-cat("Summary of Neo-junction Results:\n")
-cat("Total junctions found:", nrow(neo), "\n")
-cat("Total samples analyzed:", length(unique(junction_data$sample)), "\n")
-cat("Chromosomes involved:", paste(sort(unique(neo$chr)), collapse = ", "), "\n")
-cat("Median samples per junction:", median(neo$samples_expressed), "\n")
-cat("Range of read support:", min(neo$total_reads), "-", max(neo$total_reads), "\n")
+> cat("Summary of Neo-junction Results:\n")
+Summary of Neo-junction Results:
+> cat("Total junctions found:", nrow(neo), "\n")
+Total junctions found: 32 
+> cat("Total samples analyzed:", length(unique(junction_data$sample)), "\n")
+Total samples analyzed: 282 
+> cat("Chromosomes involved:", paste(sort(unique(neo$chr)), collapse = ", "), "\n")
+Chromosomes involved: 1, 10, 11, 14, 16, 17, 19, 4, 6, 7, 8, X 
+> cat("Median samples per junction:", median(neo$samples_expressed), "\n")
+Median samples per junction: 41.5 
+> cat("Range of read support:", min(neo$total_reads), "-", max(neo$total_reads), "\n")
+Range of read support: 517 - 9233 
 
