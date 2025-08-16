@@ -63,6 +63,60 @@ Specifies the minimum allowed intron length (20 bases) for splice junctions. Ver
 --alignIntronMax 1000000
 Sets the maximum allowed intron length (1,000,000 bases). This limits extremely long introns that could be biologically implausible or mapping artifacts.
 
+####################################################################
+# To generate Annotation files
+####################################################################
+
+#!/usr/bin/env bash
+
+# For canonical_junctions.txt
+zcat ../../../Ref/genome.gtf.gz | awk -F'\t' '
+$3 == "exon" && $9 ~ "gene_biotype \"protein_coding\"" {
+    # Extract gene_name
+    gene_name = "";
+    split($9, attrs, ";");
+    for (i in attrs) {
+        if (attrs[i] ~ /gene_name/) {
+            split(attrs[i], gn, "\"");
+            gene_name = gn[2];
+            break;
+        }
+    }
+    # Print in BED format
+    if (gene_name != "") {
+        print $1 "\t" $4-1 "\t" $5 "\t" gene_name "\t0\t" $7;
+    }
+}' | sort -k1,1 -k2,2n | uniq > canonical_junctions.txt
+
+# For protein_coding.bed
+zcat ../../../Ref/genome.gtf.gz | awk -F'\t' '
+$3 == "gene" && $9 ~ "gene_biotype \"protein_coding\"" {
+    # Extract gene_name
+    gene_name = "";
+    split($9, attrs, ";");
+    for (i in attrs) {
+        if (attrs[i] ~ /gene_name/) {
+            split(attrs[i], gn, "\"");
+            gene_name = gn[2];
+            break;
+        }
+    }
+    # Print in BED format
+    if (gene_name != "") {
+        print $1 "\t" $4-1 "\t" $5 "\t" gene_name "\t0\t" $7;
+    }
+}' | sort -k1,1 -k2,2n | uniq > protein_coding.bed
+
+# For Gtex junction file
+zcat GTEx_Analysis_2017-06-05_v8_STARv2.5.3a_junctions.gct.gz \
+  | tail -n +4 \
+  | cut -f1 \
+  | awk -F'_' '{
+      chrom=$1; sub(/^chr/, "", chrom);
+      strand = ($4 == "1") ? "+" : "-";
+      print chrom ":" $2 ":" $3 ":" strand;
+    }' \
+  > gtex_junctions_fixed.txt
 
 
 ####################################################################
@@ -214,5 +268,128 @@ PYCODE
 echo "[DONE] Results saved to ${OUTDIR}/neo_junctions.bed"
 
 
+####################################################################
+# To generate Plots using R stuido 
+####################################################################
 
+
+library(tidyverse)
+library(RColorBrewer)
+
+# 1. Read and process data
+neo <- read_tsv("Neojunction/neo_junctions.annotated.bed", col_types = cols())
+
+# 2. Create a better data structure
+junction_data <- neo %>%
+  # Create junction labels with chromosome and position info
+  mutate(
+    junction_label = paste0("chr", chr, ":", start, "-", end),
+    pos = (start + end) / 2
+  ) %>%
+  # Expand samples
+  separate_rows(samples, sep = ",") %>%
+  rename(sample = samples) %>%
+  select(junction_label, chr, pos, sample, total_reads, samples_expressed, frequency)
+
+# 3. Create a presence/absence matrix but keep read counts
+plot_data <- junction_data %>%
+  # Order chromosomes properly
+  mutate(chr = factor(chr, levels = c(1:22, "X", "Y"))) %>%
+  arrange(chr, pos)
+
+# 4. Create an informative heatmap-style plot
+p1 <- ggplot(plot_data, aes(x = reorder(junction_label, pos), y = sample)) +
+  geom_tile(aes(fill = log10(total_reads + 1)), color = "white", size = 0.1) +
+  scale_fill_gradient(low = "white", high = "darkred", 
+                      name = "log10(reads+1)") +
+  facet_wrap(~chr, scales = "free_x", nrow = 2) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(size = 6),
+    strip.text = element_text(face = "bold"),
+    panel.spacing = unit(0.1, "lines")
+  ) +
+  labs(
+    title = "Neo-junctions: Read Support Across Samples by Chromosome",
+    subtitle = paste0("32 novel junctions across ", length(unique(plot_data$sample)), " samples"),
+    x = "Junction position (ordered by chromosome)",
+    y = "Sample ID"
+  )
+
+# 5. Create a summary bar plot
+summary_data <- neo %>%
+  mutate(chr = factor(chr, levels = c(1:22, "X", "Y"))) %>%
+  arrange(chr, start)
+
+p2 <- ggplot(summary_data, aes(x = reorder(paste0("chr", chr, ":", start, "-", end), start))) +
+  geom_col(aes(y = samples_expressed), fill = "steelblue", alpha = 0.7) +
+  geom_text(aes(y = samples_expressed + 2, label = samples_expressed), 
+            size = 3, angle = 90) +
+  facet_wrap(~chr, scales = "free_x", nrow = 1) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_blank(),
+    strip.text = element_text(face = "bold"),
+    panel.spacing = unit(0.1, "lines")
+  ) +
+  labs(
+    title = "Number of Samples per Neo-junction",
+    x = "Junction position (ordered by chromosome)",
+    y = "Number of samples"
+  )
+
+# 6. Create a frequency distribution plot
+p3 <- ggplot(neo, aes(x = samples_expressed)) +
+  geom_histogram(bins = 15, fill = "darkgreen", alpha = 0.7, color = "white") +
+  geom_vline(xintercept = median(neo$samples_expressed), 
+             color = "red", linetype = "dashed", size = 1) +
+  theme_classic() +
+  labs(
+    title = "Distribution of Neo-junction Recurrence",
+    subtitle = paste0("Median: ", median(neo$samples_expressed), " samples per junction"),
+    x = "Number of samples with junction",
+    y = "Number of junctions"
+  )
+
+
+# 7. Expanded Neo_juncton per sample count to one row.
+junction_samples <- neo %>%
+  select(key, samples) %>%
+  separate_rows(samples, sep = ",") %>%
+  rename(sample = samples)
+
+# Count neo-junctions per sample
+sample_counts <- junction_samples %>%
+  count(sample, name = "neo_junction_count") %>%
+  arrange(desc(neo_junction_count))
+
+# Make bar plot with sample names on x-axis
+p <- ggplot(sample_counts, aes(x = factor(sample, levels = sample), y = neo_junction_count)) +
+  geom_col(fill = "steelblue") +
+  geom_text(aes(label = neo_junction_count), vjust = -0.5, size = 3) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 6),
+    axis.title.x = element_blank(),
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = "Number of Neo-Junctions per Sample",
+    y = "Neo-Junction Count"
+  )
+
+# 7. Save all plots
+ggsave("neo_junctions_heatmap.png", plot = p1, width = 16, height = 29, dpi = 300)
+ggsave("neo_junctions_summary.png", plot = p2, width = 16, height = 6, dpi = 300)
+ggsave("neo_junctions_distribution.png", plot = p3, width = 8, height = 6, dpi = 300)
+ggsave("neo_junctions_per_sample.png", plot = p, width = 20, height = 6, dpi = 300)
+
+# 8. Print summary statistics
+cat("Summary of Neo-junction Results:\n")
+cat("Total junctions found:", nrow(neo), "\n")
+cat("Total samples analyzed:", length(unique(junction_data$sample)), "\n")
+cat("Chromosomes involved:", paste(sort(unique(neo$chr)), collapse = ", "), "\n")
+cat("Median samples per junction:", median(neo$samples_expressed), "\n")
+cat("Range of read support:", min(neo$total_reads), "-", max(neo$total_reads), "\n")
 
