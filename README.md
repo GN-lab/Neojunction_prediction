@@ -63,7 +63,12 @@ Specifies the minimum allowed intron length (20 bases) for splice junctions. Ver
 --alignIntronMax 1000000
 Sets the maximum allowed intron length (1,000,000 bases). This limits extremely long introns that could be biologically implausible or mapping artifacts.
 
-**Neojunction_prediction_script**
+
+####################################################################
+# Neo-Junction Pipeline - Optimized for STAR 2.7.10a
+# Parameters: --alignSJoverhangMin 8 --alignIntronMin 20 --outSJfilterOverhangMin 15 20 20 20
+####################################################################
+
 
 #!/usr/bin/env bash
 set -euo pipefail
@@ -75,11 +80,6 @@ source "${WORKDIR}/venv/bin/activate"
 PYTHON="${WORKDIR}/venv/bin/python3"
 
 module load bedtools/2.29.2
-
-####################################################################
-# Neo-Junction Pipeline - Optimized for STAR 2.7.10a
-# Parameters: --alignSJoverhangMin 8 --alignIntronMin 20 --outSJfilterOverhangMin 15 20 20 20
-####################################################################
 
 # ------------------------- Configuration --------------------------
 
