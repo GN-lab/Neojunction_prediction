@@ -63,5 +63,59 @@ Specifies the minimum allowed intron length (20 bases) for splice junctions. Ver
 --alignIntronMax 1000000
 Sets the maximum allowed intron length (1,000,000 bases). This limits extremely long introns that could be biologically implausible or mapping artifacts.
 
+####################################################################
+# To generate Annotation files
+####################################################################
+
+#!/usr/bin/env bash
+
+# For canonical_junctions.txt
+zcat ../../../Ref/genome.gtf.gz | awk -F'\t' '
+$3 == "exon" && $9 ~ "gene_biotype \"protein_coding\"" {
+    # Extract gene_name
+    gene_name = "";
+    split($9, attrs, ";");
+    for (i in attrs) {
+        if (attrs[i] ~ /gene_name/) {
+            split(attrs[i], gn, "\"");
+            gene_name = gn[2];
+            break;
+        }
+    }
+    # Print in BED format
+    if (gene_name != "") {
+        print $1 "\t" $4-1 "\t" $5 "\t" gene_name "\t0\t" $7;
+    }
+}' | sort -k1,1 -k2,2n | uniq > canonical_junctions.txt
+
+# For protein_coding.bed
+zcat ../../../Ref/genome.gtf.gz | awk -F'\t' '
+$3 == "gene" && $9 ~ "gene_biotype \"protein_coding\"" {
+    # Extract gene_name
+    gene_name = "";
+    split($9, attrs, ";");
+    for (i in attrs) {
+        if (attrs[i] ~ /gene_name/) {
+            split(attrs[i], gn, "\"");
+            gene_name = gn[2];
+            break;
+        }
+    }
+    # Print in BED format
+    if (gene_name != "") {
+        print $1 "\t" $4-1 "\t" $5 "\t" gene_name "\t0\t" $7;
+    }
+}' | sort -k1,1 -k2,2n | uniq > protein_coding.bed
+
+# For Gtex junction file
+zcat GTEx_Analysis_2017-06-05_v8_STARv2.5.3a_junctions.gct.gz \
+  | tail -n +4 \
+  | cut -f1 \
+  | awk -F'_' '{
+      chrom=$1; sub(/^chr/, "", chrom);
+      strand = ($4 == "1") ? "+" : "-";
+      print chrom ":" $2 ":" $3 ":" strand;
+    }' \
+  > gtex_junctions_fixed.txt
 
 
