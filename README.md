@@ -2,7 +2,7 @@
 
 Neojunction prediction from 307 transcriptomic dataset acquired from Hartwig (Breast sample)
 
-Found 32 neo-junctions that passed all the filtering criteria
+Found 32 neo-junctions observed in 208 samples that passed all the filtering criteria
 
 The neo-junctions identified are:
 
