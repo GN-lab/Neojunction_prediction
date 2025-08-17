@@ -336,14 +336,169 @@ p <- ggplot(sample_counts, aes(x = factor(sample, levels = sample), y = neo_junc
 
 
 
+# 8. Fixed Circos Plot Chr with link counts  
+library(circlize)
+library(readr)
+library(dplyr)
+library(RColorBrewer)
 
-# 7. Save all plots
+# Read the data
+neo <- read_tsv("Neojunction/neo_junctions.annotated.bed", col_types = cols())
+
+# Process data: sample-chromosome connections with counts
+sample_chr_data <- neo %>%
+  select(chr, samples, total_reads) %>%
+  separate_rows(samples, sep = ",") %>%
+  rename(sample = samples) %>%
+  group_by(sample, chr) %>%
+  summarise(
+    junction_count = n(),
+    total_reads = sum(total_reads, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(total_reads))
+
+# Create hierarchical sample groups
+sample_summary <- sample_chr_data %>%
+  group_by(sample) %>%
+  summarise(
+    total_reads_sample = sum(total_reads),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    activity_group = case_when(
+      total_reads_sample >= quantile(total_reads_sample, 0.8) ~ "High",
+      total_reads_sample >= quantile(total_reads_sample, 0.5) ~ "Medium", 
+      total_reads_sample >= quantile(total_reads_sample, 0.2) ~ "Low",
+      TRUE ~ "Very Low"
+    )
+  )
+
+# Create color schemes
+chr_colors <- setNames(
+  rainbow(length(unique(sample_chr_data$chr))), 
+  sort(unique(sample_chr_data$chr))
+)
+
+activity_colors <- c("High" = "#D32F2F", "Medium" = "#FF9800", 
+                     "Low" = "#4CAF50", "Very Low" = "#2196F3")
+
+sample_colors <- sample_summary %>%
+  mutate(base_color = activity_colors[activity_group]) %>%
+  select(sample, base_color) %>%
+  deframe()
+
+# Create adjacency matrix
+adj_matrix <- sample_chr_data %>%
+  select(sample, chr, total_reads) %>%
+  pivot_wider(names_from = chr, values_from = total_reads, values_fill = 0) %>%
+  column_to_rownames("sample") %>%
+  as.matrix()
+
+# Sort by total activity
+adj_matrix <- adj_matrix[order(rowSums(adj_matrix), decreasing = TRUE), ]
+
+cat("Matrix dimensions:", nrow(adj_matrix), "x", ncol(adj_matrix), "\n")
+
+# Calculate appropriate gaps - CRITICAL FIX
+n_chroms <- ncol(adj_matrix)
+n_samples <- nrow(adj_matrix) 
+total_sectors <- n_chroms + n_samples
+
+# Make sure total gaps < 360 degrees
+small_gap <- 0.5
+big_gap <- 3
+total_gap <- (total_sectors - 2) * small_gap + 2 * big_gap
+
+cat("Total sectors:", total_sectors, "\n")
+cat("Total gap degrees:", total_gap, "\n")
+
+# If gaps too large, reduce them
+if(total_gap > 300) {
+  small_gap <- 0.2
+  big_gap <- 2
+  cat("Reduced gaps to fit\n")
+}
+
+# Create the chord diagram
+png("fixed_sample_chr_circos.png", width = 3000, height = 3000, res = 300)
+
+circos.clear()
+
+# FIXED: Calculate exact gaps
+gap_vector <- c(
+  rep(small_gap, n_chroms-1), big_gap,      # chromosomes + separator
+  rep(small_gap, n_samples-1), big_gap      # samples + final separator  
+)
+
+circos.par(
+  gap.after = gap_vector,
+  start.degree = 90
+)
+
+# Create colors for all sectors
+grid_colors <- c(
+  chr_colors,  
+  sample_colors[rownames(adj_matrix)]
+)
+
+# Draw simplified chord diagram (remove problematic parameters)
+chordDiagram(
+  adj_matrix,
+  grid.col = grid_colors,
+  transparency = 0.5,
+  annotationTrack = "grid",
+  preAllocateTracks = list(track.height = 0.1)
+)
+
+# Add labels
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  sector.name = get.cell.meta.data("sector.index")
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  
+  if(sector.name %in% names(chr_colors)) {
+    # Chromosome labels - bold and larger
+    circos.text(mean(xlim), ylim[1] + 0.2, paste0("Chr", sector.name), 
+                cex = 0.8, facing = "clockwise", niceFacing = TRUE, 
+                col = "black", font = 2)
+  } else {
+    # Sample labels - smaller
+    circos.text(mean(xlim), ylim[1] + 0.05, sector.name, 
+                cex = 0.3, facing = "clockwise", niceFacing = TRUE, 
+                col = "navy")
+  }
+}, bg.border = NA)
+
+# Add legends
+legend("topright", 
+       legend = names(activity_colors), 
+       fill = activity_colors,
+       title = "Sample Activity", 
+       cex = 0.8, bg = "white")
+
+# Add title
+title("Sample-Chromosome Neo-Junction Network\nLink Width = Read Counts", 
+      cex.main = 1.2, font.main = 2)
+
+dev.off()
+circos.clear()
+
+cat("\nSuccessfully created: fixed_sample_chr_circos.png\n")
+
+
+<img width="3000" height="3000" alt="fixed_sample_chr_circos" src="https://github.com/user-attachments/assets/aebff2ce-4701-4ffb-ab66-9a1fa8fa035b" />
+
+
+
+
+# 9. Save all plots
 ggsave("neo_junctions_heatmap.png", plot = p1, width = 16, height = 29, dpi = 300)
 ggsave("neo_junctions_summary.png", plot = p2, width = 16, height = 6, dpi = 300)
 ggsave("neo_junctions_distribution.png", plot = p3, width = 8, height = 6, dpi = 300)
 ggsave("neo_junctions_per_sample.png", plot = p, width = 20, height = 6, dpi = 300)
 
-# 8. Print summary statistics
+# 10. Print summary statistics
 > cat("Summary of Neo-junction Results:\n")
 Summary of Neo-junction Results:
 > cat("Total junctions found:", nrow(neo), "\n")
