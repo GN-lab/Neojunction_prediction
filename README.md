@@ -335,15 +335,12 @@ p <- ggplot(sample_counts, aes(x = factor(sample, levels = sample), y = neo_junc
 <img width="6000" height="1800" alt="neo_junctions_per_sample" src="https://github.com/user-attachments/assets/a7de233a-9675-4e7d-ab00-a97fd6846537" />
 
 
+# 8. Fixed Circos Plot with Chr link sampple counts  
 
-# 8. Fixed Circos Plot Chr with link counts  
 library(circlize)
 library(readr)
 library(dplyr)
 library(RColorBrewer)
-
-# Read the data
-neo <- read_tsv("Neojunction/neo_junctions.annotated.bed", col_types = cols())
 
 # Process data: sample-chromosome connections with counts
 sample_chr_data <- neo %>%
@@ -474,12 +471,16 @@ circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
 legend("topright", 
        legend = names(activity_colors), 
        fill = activity_colors,
-       title = "Sample Activity", 
+       title = "Sample frequency", 
        cex = 0.8, bg = "white")
 
 # Add title
-title("Sample-Chromosome Neo-Junction Network\nLink Width = Read Counts", 
-      cex.main = 1.2, font.main = 2)
+text(x = 0, y = 1.0, 
+     labels = "Sample-Chromosome Neo-Junction Network", 
+     cex = 1.4, font = 2, col = "black")
+text(x = 0, y = 1.15, 
+     labels = "Link Width = Read Counts", 
+     cex = 1.0, col = "darkblue")
 
 dev.off()
 circos.clear()
@@ -487,7 +488,8 @@ circos.clear()
 cat("\nSuccessfully created: fixed_sample_chr_circos.png\n")
 
 
-<img width="3000" height="3000" alt="fixed_sample_chr_circos" src="https://github.com/user-attachments/assets/aebff2ce-4701-4ffb-ab66-9a1fa8fa035b" />
+<img width="3000" height="3000" alt="fixed_sample_chr_circos" src="https://github.com/user-attachments/assets/3f4c49fc-3dcf-414a-867a-4884e7ed0c5b" />
+
 
 
 
