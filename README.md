@@ -119,3 +119,21 @@ zcat GTEx_Analysis_2017-06-05_v8_STARv2.5.3a_junctions.gct.gz \
   > gtex_junctions_fixed.txt
 
 
+####################################################################
+# Results (plots)
+####################################################################
+
+
+<img width="4800" height="8700" alt="neo_junctions_heatmap" src="https://github.com/user-attachments/assets/9d088474-66aa-4beb-9276-5c32de8e20f8" />
+
+
+<img width="2400" height="1800" alt="neo_junctions_distribution" src="https://github.com/user-attachments/assets/8ff0a045-0b5e-49ef-8281-d9313b33a3c2" />
+
+
+<img width="3000" height="3000" alt="fixed_sample_chr_circos" src="https://github.com/user-attachments/assets/10efb18e-4886-4763-8ba2-d255a08d0e1f" />
+
+
+<img width="4800" height="1800" alt="neo_junctions_summary" src="https://github.com/user-attachments/assets/10717431-1364-4e40-b764-7db7e17f275e" />
+
+
+<img width="6000" height="1800" alt="neo_junctions_per_sample" src="https://github.com/user-attachments/assets/d7a009bc-b554-41d4-a187-67e27c62e7ce" />
