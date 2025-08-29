@@ -135,5 +135,3 @@ zcat GTEx_Analysis_2017-06-05_v8_STARv2.5.3a_junctions.gct.gz \
 
 <img width="4800" height="1800" alt="neo_junctions_summary" src="https://github.com/user-attachments/assets/10717431-1364-4e40-b764-7db7e17f275e" />
 
-
-<img width="6000" height="1800" alt="neo_junctions_per_sample" src="https://github.com/user-attachments/assets/d7a009bc-b554-41d4-a187-67e27c62e7ce" />
